@@ -1,0 +1,152 @@
+# Script to perform Data Modelling
+source('R/libraries.R')
+
+
+
+# Import data -------------------------------------------------------------
+
+db <- read_csv("data/data_cleaned.csv")
+
+View(db)
+str(db) # db structure
+
+summary(db) # db summary info
+names(db) <- c("date", "inf", "ffr", "gdp", "sp500")
+
+db <- db %>% 
+	filter(year(date) < 2020)
+
+
+
+# Stationary & Time series conversion -------------------------------------
+
+# sappiamo dalla TSA che tutte le serie non sono stazionarie
+# quindi usiamo la differenza prima per renderle stazionarie (che sappiamo sempre da TSA funzionare bene)
+
+inf <- ts(diff(db$inf), start = c(1980, 2), frequency = 4) # first difference gdp deflator
+ffr <- ts(diff(db$ffr), start = c(1980, 2), frequency = 4) # first difference ff rate
+gdp <- ts(diff(db$gdp), start = c(1980, 2), frequency = 4) # first difference of gdp per capita 
+sp500 <- ts(diff(db$sp500), start = c(1980, 2), frequency = 4) # first difference of sp500 
+
+db_ts <- cbind(inf, ffr, gdp, sp500)
+attr(db_ts, "dimnames")[[2]] <- c("inf", "ffr", "gdp", "sp500")
+
+plot(db_ts, main = "")
+
+
+
+# VAR model lag selection -------------------------------------------------
+
+# cambio l'ordine delle variabile secondo l'identificazione della forma strutturale del VAR
+db_ts <- db_ts[, c("sp500", "gdp", "inf", "ffr")]
+
+nlag <- VARselect(db_ts, lag.max = 8)
+nlag
+# AIC suggerisce 3 lag
+# BIC/SC suggerisce 1 lag
+# proseguo stimando entrambi i VAR, il migliore sarà quello più parsimonioso ma senza autocorrelazione nei residui
+
+
+
+# VAR model estimation ----------------------------------------------------
+
+# aggiungo una dummy per la crisi del 2008
+dum <- ts(0, start = c(1980, 2), end = c(2019, 4), frequency = 4)
+dum[115:118] <- 1
+names(dum) <- "dummy"
+
+# stimo il modello var con nlag dato dall'BIC/SC
+var_bic <- VAR(db_ts, p = nlag$selection["SC(n)"], exogen = dum) 
+summary(var_bic) # risultato del modello
+
+et_bic <- residuals(var_bic) %>% as.data.frame() # residui del modello
+colMeans(et_bic) # medie nulle
+x11()
+plot(var_bic)
+serial.test(var_bic) # no serial correlation of residuals
+
+# stimo il modello var con nlag dato dall'AIC
+var_aic <- VAR(db_ts, p = nlag$selection["AIC(n)"], exogen = dum) 
+summary(var_aic) # risultato del modello
+
+et_aic <- residuals(var_aic) %>% as.data.frame() # residui del modello
+colMeans(et_aic) # medie nulle
+x11()
+plot(var_aic)
+serial.test(var_aic) # no serial correlation of residuals
+
+# il modello con 1 lag (BIC) va bene in quanto i residui hanno media zero e non presentano autocorrelazione residua
+var <- var_bic
+
+# diagnostic test
+serial.test(var_aic) # no serial correlation of residuals
+arch.test(var, lags.multi = 12) # no ARCH effects
+normality.test(var) # non-normal residuals
+
+# Stability Analysis ------------------------------------------------------
+
+uroot <- roots(var)
+points_coord <- data.frame(x = uroot, y = uroot, Equation = names(var$varresult))
+ggplot(points_coord) +
+	geom_circle(mapping = aes(x0 = 0, y0 = 0, r = 1)) +
+	geom_point(aes(x = x, y = y, col = Equation)) +
+	geom_text(aes(x = x, y = y, label = round(x, 3)), 
+						nudge_y = 0.1, nudge_x = -0.1)
+
+stab <- stability(var)
+stab
+plot(stab, nc = 2) # all process stable except sp500 may have a structural change
+# plot of the sum of recursive residuals 
+# If at any point in the graph, the sum goes out of the red critical bounds, 
+# then a structural break at that point was seen
+
+
+# Structural VAR Identification -------------------------------------------
+
+# creo la matrice di identificazione con metodo Cholesky per passare alla forma strutturale
+# uso la scomposizione triangolare inferiore
+A <- diag(4)
+A[lower.tri(A)] <- NA
+A
+
+# stimo la forma strutturale
+svar <- SVAR(var, Amat = A)
+svar
+
+summary(var) # risultato modello var non strutturale
+
+
+# Impulse Response Functions ----------------------------------------------
+
+# structural irf (ortho = TRUE significa shock ortogonali, quindi identificati tramite Cholesky decomposition)
+impulses <- responses <- c("sp500", "gdp", "inf", "ffr")
+for (imp in impulses) {
+	for (res in responses) {
+		imp_res <- irf(var, n.ahead = 12, ortho = TRUE, 
+									 impulse = imp, response = res)
+		p <- plot(imp_res)
+		print(p)
+	}
+}
+
+# structural irf cumulative (ortho = TRUE significa shock ortogonali, quindi identificati tramite Cholesky decomposition)
+impulses <- responses <- c("sp500", "gdp", "inf", "ffr")
+for (imp in impulses) {
+	for (res in responses) {
+		imp_res <- irf(var, n.ahead = 12, ortho = TRUE, cumulative = TRUE, 
+									 impulse = imp, response = res)
+		p <- plot(imp_res)
+		print(p)
+	}
+}
+
+
+
+# Forecast Error Variance Decomposition -----------------------------------
+
+# estraggo la scomposizione della varianza per valutare qual è l'incidenza delle variabili sulla variabilità di ciascuna in caso di shock strutturali
+fev_dec <- fevd(var, n.ahead = 8)
+x11()
+plot(fev_dec)
+
+

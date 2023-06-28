@@ -1,0 +1,11 @@
+# Script to install R packages
+# (to run once)
+install.packages('tidyverse')
+install.packages('readxl')
+install.packages('lubridate')
+install.packages('ggpmisc')
+install.packages('tseries')
+install.packages('changepoint')
+install.packages('strucchange')
+install.packages('vars')
+install.packages('ggforce')

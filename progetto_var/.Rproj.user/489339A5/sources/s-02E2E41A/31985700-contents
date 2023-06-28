@@ -1,0 +1,512 @@
+for (var in names(d_db[,-1])) {
+par(mfcol = c(1,2))
+acf(d_db[[var]], main = "")
+pacf(d_db[[var]], main = "")
+title(var, outer = TRUE, line = -2)
+}
+View(db)
+str(db) # db structure
+summary(db) # db summary info
+names(db) <- c("date", "inf", "ffr", "gdp", "sp500")
+db <- db %>%
+filter(year(date) < 2020)
+inf <- ts(diff(db$inf), start = c(1980, 2), frequency = 4) # first difference gdp deflator
+ffr <- ts(diff(db$ffr), start = c(1980, 2), frequency = 4) # first difference ff rate
+gdp <- ts(diff(db$gdp), start = c(1980, 2), frequency = 4) # first difference of gdp per capita
+sp500 <- ts(diff(db$sp500), start = c(1980, 2), frequency = 4) # first difference of sp500
+db_ts <- cbind(inf, ffr, gdp, sp500)
+attr(db_ts, "dimnames")[[2]] <- c("inf", "ffr", "gdp", "sp500")
+db_ts <- db_ts[, c("sp500", "gdp", "inf", "ffr")]
+nlag <- VARselect(db_ts, lag.max = 8)
+nlag
+# aggiungo una dummy per la crisi del 2008
+dum <- ts(0, start = c(1980, 2), end = c(2019, 4), frequency = 4)
+dum[115:118] <- 1
+names(dum) <- "dummy"
+var_bic <- VAR(db_ts, p = nlag$selection["SC(n)"], exogen = dum)
+summary(var_bic) # risultato del modello
+et_bic <- residuals(var_bic) %>% as.data.frame() # residui del modello
+colMeans(et_bic) # medie nulle
+serial.test(var_bic)
+# il modello con 1 lag (BIC) va bene in quanto i residui hanno media zero e non presentano autocorrelazione residua
+var <- var_bic
+uroot <- roots(var)
+points_coord <- data.frame(x = uroot, y = uroot, Equation = names(var$varresult))
+ggplot(points_coord) +
+geom_circle(mapping = aes(x0 = 0, y0 = 0, r = 1)) +
+geom_point(aes(x = x, y = y, col = Equation)) +
+geom_text(aes(x = x, y = y, label = round(x, 3)),
+nudge_y = 0.1, nudge_x = -0.1)
+# creo la matrice di identificazione con metodo Cholesky per passare alla forma strutturale
+# uso la scomposizione triangolare inferiore
+A <- diag(4)
+A[lower.tri(A)] <- NA
+A
+svar <- SVAR(var, Amat = A)
+svar
+knitr::opts_chunk$set(echo = FALSE)
+# Set Working Directory
+setwd("C:/Users/Administrator/Desktop/data")
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(ggpmisc)
+library(tseries)
+library(changepoint)
+library(strucchange)
+library(vars)
+library(ggforce)
+library(rmarkdown)
+library(markdown)
+library(knitr)
+library(png)
+db <- read_csv("data/data_cleaned.csv")
+View(db)
+str(db) # db structure
+summary(db) # db summary info
+names(db) <- c("date", "GDP Deflator", "Federal Funds Rate", "Real GDP per capita", "S&P 500")
+db <- db %>%
+filter(year(date) < 2020)
+db
+db %>%
+pivot_longer(cols = -date, names_to = "ts", values_to = "value") %>%
+ggplot(aes(x = date, y = value)) +
+geom_line() +
+facet_wrap(~ ts, scales = "free_y", nrow = 2, ncol = 2) +
+xlab("") + ylab("")
+for (var in names(db[,-1])) {
+par(mfcol = c(1, 2))
+acf(db[[var]], main = "")
+pacf(db[[var]], main = "")
+title(var, outer = TRUE, line = -2)
+}
+# first difference db
+d_db <- data.frame(date = db$date[-1],
+d_gdpdef = diff(db$`GDP Deflator`),
+d_ffr = diff(db$`Federal Funds Rate`),
+d_rgdp = diff(log(db$`Real GDP per capita`)),
+d_sp500 = diff(log(db$`S&P 500`)))
+names(d_db) <- c("date", "&delta; GDP Deflator", "Δ Federal Funds Rate", "Δ Real GDP per capita", "Δ S&P 500")
+# first difference means
+d_db_mean <- d_db %>%
+pivot_longer(cols = -date, names_to = "ts", values_to = "value") %>%
+group_by(ts) %>%
+summarise(value = mean(value))
+d_db_mean
+# multiple time series plot
+d_db %>%
+pivot_longer(cols = -date, names_to = "ts", values_to = "value") %>%
+ggplot(aes(x = date, y = value)) +
+geom_line() +
+geom_hline(data =	d_db_mean, aes(yintercept = value), col = "blue",
+size = 0.5, alpha = 0.7) +
+facet_wrap(~ ts, scales = "free_y", nrow = 2, ncol = 2) +
+xlab("") + ylab("")
+for (var in names(d_db[,-1])) {
+par(mfcol = c(1,2))
+acf(d_db[[var]], main = "")
+pacf(d_db[[var]], main = "")
+title(var, outer = TRUE, line = -2)
+}
+View(db)
+str(db) # db structure
+summary(db) # db summary info
+names(db) <- c("date", "inf", "ffr", "gdp", "sp500")
+db <- db %>%
+filter(year(date) < 2020)
+inf <- ts(diff(db$inf), start = c(1980, 2), frequency = 4) # first difference gdp deflator
+ffr <- ts(diff(db$ffr), start = c(1980, 2), frequency = 4) # first difference ff rate
+gdp <- ts(diff(db$gdp), start = c(1980, 2), frequency = 4) # first difference of gdp per capita
+sp500 <- ts(diff(db$sp500), start = c(1980, 2), frequency = 4) # first difference of sp500
+db_ts <- cbind(inf, ffr, gdp, sp500)
+attr(db_ts, "dimnames")[[2]] <- c("inf", "ffr", "gdp", "sp500")
+db_ts <- db_ts[, c("sp500", "gdp", "inf", "ffr")]
+nlag <- VARselect(db_ts, lag.max = 8)
+nlag
+# aggiungo una dummy per la crisi del 2008
+dum <- ts(0, start = c(1980, 2), end = c(2019, 4), frequency = 4)
+dum[115:118] <- 1
+names(dum) <- "dummy"
+var_bic <- VAR(db_ts, p = nlag$selection["SC(n)"], exogen = dum)
+summary(var_bic) # risultato del modello
+et_bic <- residuals(var_bic) %>% as.data.frame() # residui del modello
+colMeans(et_bic) # medie nulle
+serial.test(var_bic)
+# il modello con 1 lag (BIC) va bene in quanto i residui hanno media zero e non presentano autocorrelazione residua
+var <- var_bic
+uroot <- roots(var)
+points_coord <- data.frame(x = uroot, y = uroot, Equation = names(var$varresult))
+ggplot(points_coord) +
+geom_circle(mapping = aes(x0 = 0, y0 = 0, r = 1)) +
+geom_point(aes(x = x, y = y, col = Equation)) +
+geom_text(aes(x = x, y = y, label = round(x, 3)),
+nudge_y = 0.1, nudge_x = -0.1)
+# creo la matrice di identificazione con metodo Cholesky per passare alla forma strutturale
+# uso la scomposizione triangolare inferiore
+A <- diag(4)
+A[lower.tri(A)] <- NA
+A
+svar <- SVAR(var, Amat = A)
+svar
+print("&delta;")
+print("\U0394")
+knitr::opts_chunk$set(echo = FALSE)
+# Set Working Directory
+setwd("C:/Users/Administrator/Desktop/data")
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(ggpmisc)
+library(tseries)
+library(changepoint)
+library(strucchange)
+library(vars)
+library(ggforce)
+library(rmarkdown)
+library(markdown)
+library(knitr)
+library(png)
+db <- read_csv("data/data_cleaned.csv")
+View(db)
+str(db) # db structure
+summary(db) # db summary info
+names(db) <- c("date", "GDP Deflator", "Federal Funds Rate", "Real GDP per capita", "S&P 500")
+db <- db %>%
+filter(year(date) < 2020)
+db
+db %>%
+pivot_longer(cols = -date, names_to = "ts", values_to = "value") %>%
+ggplot(aes(x = date, y = value)) +
+geom_line() +
+facet_wrap(~ ts, scales = "free_y", nrow = 2, ncol = 2) +
+xlab("") + ylab("")
+for (var in names(db[,-1])) {
+par(mfcol = c(1, 2))
+acf(db[[var]], main = "")
+pacf(db[[var]], main = "")
+title(var, outer = TRUE, line = -2)
+}
+# first difference db
+d_db <- data.frame(date = db$date[-1],
+d_gdpdef = diff(db$`GDP Deflator`),
+d_ffr = diff(db$`Federal Funds Rate`),
+d_rgdp = diff(log(db$`Real GDP per capita`)),
+d_sp500 = diff(log(db$`S&P 500`)))
+names(d_db) <- c("date", "\U0394 GDP Deflator", "\U0394 Federal Funds Rate", "\U0394 Real GDP per capita", "\U0394 S&P 500")
+# first difference means
+d_db_mean <- d_db %>%
+pivot_longer(cols = -date, names_to = "ts", values_to = "value") %>%
+group_by(ts) %>%
+summarise(value = mean(value))
+d_db_mean
+# multiple time series plot
+d_db %>%
+pivot_longer(cols = -date, names_to = "ts", values_to = "value") %>%
+ggplot(aes(x = date, y = value)) +
+geom_line() +
+geom_hline(data =	d_db_mean, aes(yintercept = value), col = "blue",
+size = 0.5, alpha = 0.7) +
+facet_wrap(~ ts, scales = "free_y", nrow = 2, ncol = 2) +
+xlab("") + ylab("")
+for (var in names(d_db[,-1])) {
+par(mfcol = c(1,2))
+acf(d_db[[var]], main = "")
+pacf(d_db[[var]], main = "")
+title(var, outer = TRUE, line = -2)
+}
+View(db)
+str(db) # db structure
+summary(db) # db summary info
+names(db) <- c("date", "inf", "ffr", "gdp", "sp500")
+db <- db %>%
+filter(year(date) < 2020)
+inf <- ts(diff(db$inf), start = c(1980, 2), frequency = 4) # first difference gdp deflator
+ffr <- ts(diff(db$ffr), start = c(1980, 2), frequency = 4) # first difference ff rate
+gdp <- ts(diff(db$gdp), start = c(1980, 2), frequency = 4) # first difference of gdp per capita
+sp500 <- ts(diff(db$sp500), start = c(1980, 2), frequency = 4) # first difference of sp500
+db_ts <- cbind(inf, ffr, gdp, sp500)
+attr(db_ts, "dimnames")[[2]] <- c("inf", "ffr", "gdp", "sp500")
+View(db)
+str(db) # db structure
+summary(db) # db summary info
+names(db) <- c("date", "inf", "ffr", "gdp", "sp500")
+db <- db %>%
+filter(year(date) < 2020)
+inf <- ts(diff(db$inf), start = c(1980, 2), frequency = 4) # first difference gdp deflator
+ffr <- ts(diff(db$ffr), start = c(1980, 2), frequency = 4) # first difference ff rate
+gdp <- ts(diff(db$gdp), start = c(1980, 2), frequency = 4) # first difference of gdp per capita
+sp500 <- ts(diff(db$sp500), start = c(1980, 2), frequency = 4) # first difference of sp500
+db_ts <- cbind(inf, ffr, gdp, sp500)
+attr(db_ts, "dimnames")[[2]] <- c("inf", "ffr", "gdp", "sp500")
+db_ts <- db_ts[, c("sp500", "gdp", "inf", "ffr")]
+nlag <- VARselect(db_ts, lag.max = 8)
+nlag
+# aggiungo una dummy per la crisi del 2008
+dum <- ts(0, start = c(1980, 2), end = c(2019, 4), frequency = 4)
+dum[115:118] <- 1
+names(dum) <- "dummy"
+# aggiungo una dummy per la crisi del 2008
+dum <- ts(0, start = c(1980, 2), end = c(2019, 4), frequency = 4)
+dum[115:118] <- 1
+names(dum) <- "dummy"
+var_bic <- VAR(db_ts, p = nlag$selection["SC(n)"], exogen = dum)
+summary(var_bic) # risultato del modello
+et_bic <- residuals(var_bic) %>% as.data.frame() # residui del modello
+colMeans(et_bic) # medie nulle
+serial.test(var_bic)
+uroot <- roots(var)
+# il modello con 1 lag (BIC) va bene in quanto i residui hanno media zero e non presentano autocorrelazione residua
+var <- var_bic
+uroot <- roots(var)
+points_coord <- data.frame(x = uroot, y = uroot, Equation = names(var$varresult))
+ggplot(points_coord) +
+geom_circle(mapping = aes(x0 = 0, y0 = 0, r = 1)) +
+geom_point(aes(x = x, y = y, col = Equation)) +
+geom_text(aes(x = x, y = y, label = round(x, 3)),
+nudge_y = 0.1, nudge_x = -0.1)
+# creo la matrice di identificazione con metodo Cholesky per passare alla forma strutturale
+# uso la scomposizione triangolare inferiore
+A <- diag(4)
+A[lower.tri(A)] <- NA
+A
+svar <- SVAR(var, Amat = A)
+svar
+?var
+# Script to perform Data Modelling
+source('R/libraries.R')
+db <- read_csv("data/data_cleaned.csv")
+View(db)
+names(db) <- c("date", "inf", "ffr", "gdp", "sp500")
+db <- db %>%
+filter(year(date) < 2020)
+inf <- ts(diff(db$inf), start = c(1980, 2), frequency = 4) # first difference gdp deflator
+ffr <- ts(diff(db$ffr), start = c(1980, 2), frequency = 4) # first difference ff rate
+gdp <- ts(diff(db$gdp), start = c(1980, 2), frequency = 4) # first difference of gdp per capita
+sp500 <- ts(diff(db$sp500), start = c(1980, 2), frequency = 4) # first difference of sp500
+db_ts <- cbind(inf, ffr, gdp, sp500)
+attr(db_ts, "dimnames")[[2]] <- c("inf", "ffr", "gdp", "sp500")
+plot(db_ts, main = "")
+# cambio l'ordine delle variabile secondo l'identificazione della forma strutturale del VAR
+db_ts <- db_ts[, c("sp500", "gdp", "inf", "ffr")]
+nlag <- VARselect(db_ts, lag.max = 8)
+nlag
+# aggiungo una dummy per la crisi del 2008
+dum <- ts(0, start = c(1980, 2), end = c(2019, 4), frequency = 4)
+dum[115:118] <- 1
+names(dum) <- "dummy"
+# stimo il modello var con nlag dato dall'BIC/SC
+var_bic <- VAR(db_ts, p = nlag$selection["SC(n)"], exogen = dum)
+summary(var_bic) # risultato del modello
+et_bic <- residuals(var_bic) %>% as.data.frame() # residui del modello
+colMeans(et_bic) # medie nulle
+# il modello con 1 lag (BIC) va bene in quanto i residui hanno media zero e non presentano autocorrelazione residua
+var <- var_bic
+stab <- stability(var)
+stab
+plot(stab, nc = 2) # all process stable except sp500 may have a structural change
+?summarise
+# Script to perform data cleaning tasks
+source('R/libraries.R')
+db <- read_excel("data/data.xlsx", sheet = 1)
+sp <- read_excel("data/data.xlsx", sheet = 2)
+View(sp)
+db <- mutate(db, date = as.Date(date)) # correct date format
+db
+sp <- mutate(sp, date = as.Date(date)) # correct date format
+View(sp)
+sp <- sp %>%
+mutate(q = quarter(date), y = year(date), yq = str_c(y, q, sep = " q")) %>%
+group_by(yq) %>%
+summarise(sp500 = mean(sp500))
+sp
+db <- data.frame(db, sp500 = sp$sp500)
+db
+?sep
+?str_c
+sp
+sp <- sp %>%
+mutate(q = quarter(date), y = year(date), yq = str_c(y, q, sep = " q")) %>%
+group_by(yq) %>%
+summarise(sp500 = mean(sp500))
+sp <- sp %>%
+mutate(q = quarter(date), y = year(date), yq = str_c(y, q, sep = " q")) %>%
+group_by(yq) %>%
+summarise(sp500 = mean(sp500))
+db <- mutate(db, date = as.Date(date)) # correct date format
+sp <- mutate(sp, date = as.Date(date)) # correct date format
+sp <- read_excel("data/data.xlsx", sheet = 2)
+sp <- mutate(sp, date = as.Date(date)) # correct date format
+sp <- sp %>%
+mutate(q = quarter(date), y = year(date), yq = str_c(y, q, sep = " q")) %>%
+group_by(yq) %>%
+summarise(sp500 = mean(sp500))
+sp
+?var
+?roots
+?stability
+# Script to load R packages
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(ggpmisc)
+library(tseries)
+library(changepoint)
+library(strucchange)
+library(vars)
+?VAR
+# Script to load R packages
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(ggpmisc)
+library(tseries)
+library(changepoint)
+library(strucchange)
+library(vars)
+library(ggforce)
+db <- read_csv("data/data_cleaned.csv")
+names(db) <- c("date", "inf", "ffr", "gdp", "sp500")
+db <- db %>%
+filter(year(date) < 2020)
+inf <- ts(diff(db$inf), start = c(1980, 2), frequency = 4) # first difference gdp deflator
+ffr <- ts(diff(db$ffr), start = c(1980, 2), frequency = 4) # first difference ff rate
+gdp <- ts(diff(db$gdp), start = c(1980, 2), frequency = 4) # first difference of gdp per capita
+sp500 <- ts(diff(db$sp500), start = c(1980, 2), frequency = 4) # first difference of sp500
+db_ts <- cbind(inf, ffr, gdp, sp500)
+attr(db_ts, "dimnames")[[2]] <- c("inf", "ffr", "gdp", "sp500")
+# cambio l'ordine delle variabile secondo l'identificazione della forma strutturale del VAR
+db_ts <- db_ts[, c("sp500", "gdp", "inf", "ffr")]
+nlag <- VARselect(db_ts, lag.max = 8)
+nlag
+# stimo il modello var con nlag dato dall'BIC/SC
+var_bic <- VAR(db_ts, p = nlag$selection["SC(n)"], exogen = dum)
+# aggiungo una dummy per la crisi del 2008
+dum <- ts(0, start = c(1980, 2), end = c(2019, 4), frequency = 4)
+dum[115:118] <- 1
+names(dum) <- "dummy"
+# stimo il modello var con nlag dato dall'BIC/SC
+var_bic <- VAR(db_ts, p = nlag$selection["SC(n)"], exogen = dum)
+# il modello con 1 lag (BIC) va bene in quanto i residui hanno media zero e non presentano autocorrelazione residua
+var <- var_bic
+# creo la matrice di identificazione con metodo Cholesky per passare alla forma strutturale
+# uso la scomposizione triangolare inferiore
+A <- diag(4)
+A[lower.tri(A)] <- NA
+# stimo la forma strutturale
+svar <- SVAR(var, Amat = A)
+svar
+# creo la matrice di identificazione con metodo Cholesky per passare alla forma strutturale
+# uso la scomposizione triangolare inferiore
+A <- diag(4)
+A
+diag(4)
+A[lower.tri(A)] <- NA
+A
+?lower.tri
+?NA
+# Script to perform Data Modelling
+source('R/libraries.R')
+db <- read_csv("data/data_cleaned.csv")
+db <- db %>%
+filter(year(date) < 2020)
+# ACF & Partial ACF plot
+for (var in names(db[,-1])) {
+par(mfrow = c(1, 2))
+acf(db[[var]], main = "")
+pacf(db[[var]], main = "")
+title(var, outer = TRUE, line = -2)
+}
+# Augmented Dickey-Fuller Test on Levels
+adf.test(db$`GDP Deflator`) # non-stationary
+# single time series plot
+for (var in names(db[,-1])) {
+p <- db %>%
+pivot_longer(cols = -date, names_to = "ts", values_to = "value") %>%
+filter(ts == var) %>%
+ggplot(aes(x = date, y = value)) +
+geom_line() +
+labs(title = var) + xlab("") + ylab("")
+print(p)
+}
+rm(p)
+# multiple time series plot
+db %>%
+pivot_longer(cols = -date, names_to = "ts", values_to = "value") %>%
+ggplot(aes(x = date, y = value), as.numeric = FALSE) +
+geom_line() +
+facet_wrap(~ ts, scales = "free_y", nrow = 4, ncol = 1) +
+xlab("") + ylab("")
+# multiple time series plot
+db %>%
+pivot_longer(cols = -date, names_to = "ts", values_to = "value") %>%
+ggplot(aes(x = date, y = value)) +
+geom_line() +
+facet_wrap(~ ts, scales = "free_y", nrow = 2, ncol = 2) +
+xlab("") + ylab("")
+# Structural changes
+for (var in names(db[,-1])) {
+bp <- breakpoints(db[[var]] ~ 1, data = db) # compute structural breaks
+bp_obs <- db %>%
+pivot_longer(cols = -date, names_to = "ts", values_to = "value") %>%
+filter(ts == var) %>%
+slice(bp$breakpoints) # select only break observations
+p <- db %>%
+pivot_longer(cols = -date, names_to = "ts", values_to = "value") %>%
+filter(ts == var) %>%
+ggplot(aes(x = date, y = value)) +
+geom_line() +
+geom_vline(data =	bp_obs, aes(xintercept = date), col = "red",
+cex = 0.8, alpha = 0.7, linetype = "dashed") +
+geom_text(data = bp_obs, aes(x = date, label = year(date), y = 2),
+col = "red", hjust = 0) +
+labs(title = var) + xlab("") + ylab("")
+print(p)
+}
+# ACF & Partial ACF plot
+for (var in names(db[,-1])) {
+par(mfrow = c(1, 2))
+acf(db[[var]], main = "")
+pacf(db[[var]], main = "")
+title(var, outer = TRUE, line = -2)
+}
+# Augmented Dickey-Fuller Test on Levels
+adf.test(db$`GDP Deflator`) # non-stationary
+adf.test(db$`Federal Funds Rate`) # stationary
+adf.test(db$`Real GDP per capita`) # non-stationary
+adf.test(db$`S&P 500`) # non-stationary
+db <- read_csv("data/data_cleaned.csv")
+names(db) <- c("date", "GDP Deflator", "Federal Funds Rate", "Real GDP per capita", "S&P 500")
+db <- db %>%
+filter(year(date) < 2020)
+# Augmented Dickey-Fuller Test on First Differences
+adf.test(diff(db$`GDP Deflator`)) # stationary
+adf.test(diff(db$`Federal Funds Rate`)) # stationary
+adf.test(diff(db$`Real GDP per capita`)) # stationary
+adf.test(diff(db$`S&P 500`)) # stationary
+kpss.test(diff(db$`Federal Funds Rate`)) # stationary
+# Script to perform data cleaning tasks
+source('R/libraries.R')
+db <- read_excel("data/data.xlsx", sheet = 1)
+sp <- read_excel("data/data.xlsx", sheet = 2)
+?mutate
+db <- read_excel("data/data.xlsx", sheet = 1)
+db
+db <- mutate(db, date = as.Date(date)) # correct date format
+db
+db <- read_csv("data/data_cleaned.csv")
+View(db)
+str(db) # db structure
+summary(db) # db summary info
+names(db) <- c("date", "GDP Deflator", "Federal Funds Rate", "Real GDP per capita", "S&P 500")
+db <- db %>%
+filter(year(date) < 2020)
+# single time series plot
+for (var in names(db[,-1])) {
+p <- db %>%
+pivot_longer(cols = -date, names_to = "ts", values_to = "value") %>%
+filter(ts == var) %>%
+ggplot(aes(x = date, y = value)) +
+geom_line() +
+labs(title = var) + xlab("") + ylab("")
+print(p)
+}
